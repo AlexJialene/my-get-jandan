@@ -19,7 +19,6 @@ const (
 	requestPageHeadPrefix string = "http://jandan.net/ooxx/page-"
 	requestPageHeadSuffix string = "#comments"
 	path                  string = "./meizhi"
-	concurrent            int    = 3 //并发
 )
 
 var (
@@ -27,7 +26,8 @@ var (
 	pageNumSpanPatten string = `<span class="current-comment-page">\[\d*\]</span>`
 	pageNumPatten     string = `\d+`
 
-	c chan int
+	downloadResult         chan int //下载状态
+	currentDownloadNumChan chan int //当前下载数量
 )
 
 func getAllPageNum(html string) int {
@@ -41,7 +41,7 @@ func getAllPageNum(html string) int {
 }
 
 func setAllPicHashFromPage(doc *goquery.Document) []string {
-	pagePicHash := make([]string, 100)
+	pagePicHash := make([]string, 50)
 	doc.Find(".img-hash").Each(func(i int, selection *goquery.Selection) {
 		src := selection.Text()
 		pagePicHash[i] = src
@@ -87,7 +87,8 @@ func download(num int) {
 		for _, hash := range pagePicHash {
 			if hash != "" {
 				url, _ := base64kit.Base64Decode(hash)
-				down(url)
+				downloadResult <- 1
+				go down(url)
 			} else {
 				continue
 			}
@@ -122,6 +123,7 @@ func down(s string) {
 	}
 	defer fh.Close()
 	fh.Write(imgByte)
+	<-downloadResult
 
 }
 
@@ -131,13 +133,17 @@ func getRegexpPatten(patten string) *regexp.Regexp {
 }
 
 func main() {
-	c = make(chan int)
+	downloadResult = make(chan int, 3)
+	//currentDownloadNumChan = make(chan int, 10)
+	defer close(downloadResult)
+	//defer close(currentDownloadNumChan)
 
-	//_, home, _ := getHtml(requestHead)
-	//maxPageNum = getAllPageNum(home)
+	_, home, _ := getHtml(requestHead)
+	maxPageNum = getAllPageNum(home)
 
-	maxPageNum = 2
+	//maxPageNum = 7
 	for i := maxPageNum; i > 0; i-- {
 		download(i)
 	}
+
 }
